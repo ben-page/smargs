@@ -1,0 +1,10 @@
+{
+  "name": "smargs",
+  "version": "1.0.0",
+  "description": "Smart Command Line Args Parsing & Routing",
+  "main": "index.js",
+  "private": true,
+  "dependencies": {
+    "chalk": "^1.0.0"
+  }
+}
