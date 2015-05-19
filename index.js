@@ -8,50 +8,11 @@ function smargs(def) {
     if (!def.name)
         usage = process.argv[1];
 
-    processArgument(def, args, usage);
+    //check first argument
+    nextArgument(def, args, usage, {}, 0);
 }
 
-function getArgumentValue(def, args) {
-    var value;
-
-    for (var i = 0; i < args.length; i++) {
-        value = args[i];
-
-        if (value.substr(0, 2) === '--') { //is an optional arg
-            if (def.required) //expected a required arg, so keep looking
-                continue;
-
-            var split = value.substr(2).split('=');
-            if (split.length !== 2)
-                return null;
-
-            if (split[0] === def.name) { //name matches what we're looking for
-                value = split[1];
-                args.splice(i, 1);
-                break;
-            }
-
-        } else { //is a required arg
-            if (!def.required)
-                continue;
-
-            args.splice(i, 1);
-            break;
-        }
-    }
-
-    if (value === undefined && def.default)
-        value = def.default;
-
-    switch (def.type) {
-        case 'Number':
-            return Number(value);
-        default:
-            return value;
-    }
-}
-
-function processArgument(def, args, usage) {
+function nextArgument(def, args, usage, opts, depth) {
     if (!def.name)
         throw new Error('name is required');
 
@@ -64,9 +25,9 @@ function processArgument(def, args, usage) {
         usage = def.name;
 
     if (!!def.commands && !!def.arguments)
-        throw new Error('a command may not have child commands, arguments, or an action');
+        throw new Error('a command may not have child commands and arguments');
 
-    var i, help, maxLength, value;
+    var i, help, maxLength = 0, value, valid = true;
 
     //process commands
     if (def.commands) {
@@ -82,8 +43,10 @@ function processArgument(def, args, usage) {
         for (i = 0; i < def.commands.length; i++) {
             var command = def.commands[i];
 
-            if (value === command.name) {
-                return processArgument(command, args.slice(1), usage);
+            //command matched, so check next command line argument
+            if (checkName(command, value)) {
+                opts['command' + depth] = value;
+                return nextArgument(command, args.slice(1), usage, opts, ++depth);
             }
 
             help += '  ' + command.name + (new Array(maxLength - command.name.length).join(' ') + chalk.green(command.help || '') + os.EOL);
@@ -94,10 +57,8 @@ function processArgument(def, args, usage) {
     }
 
     //process arguments
-    if (def.arguments || def.action) {
-        var opts = {};
-        var valid = true;
-        var argument;
+    if (def.arguments) {
+        var argument, validateError;
 
         help = chalk.inverse('Arguments:') + os.EOL;
 
@@ -111,10 +72,13 @@ function processArgument(def, args, usage) {
         for (i = 0; i < def.arguments.length; i++) {
             argument = def.arguments[i];
 
+            //required arguments
             if (argument.required) {
                 help += '  <' + argument.name + '>' + (new Array(maxLength - argument.name.length).join(' ') + chalk.green(argument.help || '') + os.EOL);
 
-                if (args.length === 0) {
+                value = getArgumentValue(argument, args);
+
+                if (value === undefined) {
                     additionalUsage += chalk.red(' <' + argument.name + '>');
                     if (!error)
                         error = argument.name + ' is required';
@@ -122,10 +86,8 @@ function processArgument(def, args, usage) {
                     continue;
                 }
 
-                value = getArgumentValue(argument, args);
-
                 if (argument.validate) {
-                    var validateError = argument.validate(value);
+                    validateError = argument.validate(value, opts);
                     if (!!validateError) {
                         if (!error)
                             error = validateError;
@@ -136,13 +98,15 @@ function processArgument(def, args, usage) {
                 }
 
                 additionalUsage += ' ' + value;
+
+            //optional arguments
             } else {
                 help += '  --' + argument.name + (new Array(maxLength - argument.name.length).join(' ') + chalk.green(argument.help || '') + os.EOL);
 
                 value = getArgumentValue(argument, args);
 
                 if (value && argument.validate) {
-                    var validateError = argument.validate(value);
+                    validateError = argument.validate(value, opts);
                     if (!!validateError) {
                         if (!error)
                             error = validateError;
@@ -154,17 +118,78 @@ function processArgument(def, args, usage) {
 
             opts[argument.name] = value;
         }
+    }
 
-        if (valid) {
-            def.action(opts);
-            return;
-        }
+    if (valid) {
+        def.action(opts);
+        return;
     }
 
     console.log(chalk.inverse('Usage:') + ' ' + usage + additionalUsage + ' [args]');
     console.log();
     console.log(help);
     console.log(chalk.red(error));
+}
+
+function checkName(def, match) {
+    if (match === def.name)
+        return true;
+
+    if (def.alias) {
+        if (Array.isArray(def.alias)) {
+            for (var i = def.alias.length - 1; i >= 0; i--)
+                if (match === def.alias[i])
+                    return true;
+        } else if (match === def.alias) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function getArgumentValue(def, args) {
+    var value;
+
+    for (var i = 0; i < args.length; i++) {
+        var arg = args[i];
+
+        if (arg.substr(0, 2) === '--') { //is an optional arg
+            if (def.required) //expected a required arg, so keep looking
+                continue;
+
+            var split = arg.substr(2).split('=');
+            if (split.length !== 2)
+                return undefined;
+
+            if (split[0] === def.name) { //name matches what we're looking for
+                value = split[1];
+                args.splice(i, 1);
+                break;
+            }
+
+        } else { //is a required arg
+            if (!def.required)
+                continue;
+
+            value = arg;
+            args.splice(i, 1);
+            break;
+        }
+    }
+
+    if (value === undefined && def.default)
+        value = def.default;
+
+    if (value === undefined)
+        return undefined;
+
+    switch (def.type) {
+        case 'Number':
+            return Number(value);
+        default:
+            return value;
+    }
 }
 
 module.exports = smargs;
