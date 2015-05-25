@@ -4,6 +4,7 @@
   "description": "Smart Command Line Args Parsing & Routing",
   "main": "index.js",
   "private": true,
+  "license": "MIT",
   "dependencies": {
     "chalk": "^1.0.0"
   }
