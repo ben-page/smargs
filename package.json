@@ -1,11 +1,12 @@
 {
   "name": "smargs",
   "version": "1.0.0",
-  "description": "Smart Command Line Args Parsing & Routing",
-  "main": "index.js",
-  "private": true,
+  "description": "Smart Command Line Argument Parsing & Routing",
+  "main": "lib/main.js",
   "license": "MIT",
   "dependencies": {
-    "chalk": "^1.0.0"
-  }
+    "bluebird": "^2.10.0",
+    "chalk": "^1.1.1"
+  },
+  "devDependencies": {}
 }
